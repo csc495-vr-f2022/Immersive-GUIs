@@ -18,7 +18,7 @@ import { TextBlock } from "@babylonjs/gui/2D/controls/textBlock"
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { Animation } from "@babylonjs/core/Animations/animation"
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
-import { MeshBuilder } from "@babylonjs/core";
+import { Mesh, MeshBuilder } from "@babylonjs/core";
 import { AdvancedDynamicTexture } from "@babylonjs/gui/2D/advancedDynamicTexture"
 import { StackPanel3D } from "@babylonjs/gui/3D/controls/stackPanel3D"
 import { PlanePanel } from "@babylonjs/gui/3D/controls/planePanel"
@@ -29,6 +29,7 @@ import { ScatterPanel } from "@babylonjs/gui/3D/controls/scatterPanel"
 // Side effects
 import "@babylonjs/core/Helpers/sceneHelpers";
 import "@babylonjs/inspector";
+import { TransformNodeItemComponent } from "@babylonjs/inspector/components/sceneExplorer/entities/transformNodeTreeItemComponent";
 
 class Game 
 { 
@@ -111,6 +112,35 @@ class Game
         // Remove default teleportation
         xrHelper.teleportation.dispose();
 
+        // Create an animation to use for testing purposes
+        var testAnimation = new Animation(
+            "testAnimation", 
+            "position", 75, 
+            Animation.ANIMATIONTYPE_VECTOR3,
+            Animation.ANIMATIONLOOPMODE_CONSTANT
+            );
+
+        var testAnimationKeys = [];
+        testAnimationKeys.push({frame: 0, value: new Vector3(0, 4, 5)});
+        testAnimationKeys.push({frame: 75, value: new Vector3(0, .5, 5)});
+        testAnimation.setKeys(testAnimationKeys);
+
+        var testSphere = MeshBuilder.CreateSphere("testSphere", {diameter: 1}, this.scene);
+        testSphere.position = new Vector3(0, 3, 5);
+        testSphere.animations.push(testAnimation);
+        
+        
+        var staticTextPlane = MeshBuilder.CreatePlane("textPlane", {}, this.scene);
+        staticTextPlane.position.y = 0.1;
+        staticTextPlane.isPickable = false;
+
+        var staticTextTexture = AdvancedDynamicTexture.CreateForMesh(staticTextPlane, 512, 512);
+
+        var staticText = new TextBlock();
+        staticText.text = "Hello World";
+        staticText.color = "white";
+        staticText.fontSize = 12;
+        staticTextTexture.addControl(staticText);
 
         // Assign the left and right controllers to member variables
         xrHelper.input.onControllerAddedObservable.add((inputSource) => {
@@ -121,17 +151,84 @@ class Game
             else 
             {
                 this.leftController = inputSource;
-            }  
+            }
+
+            staticTextPlane.parent = this.leftController?.pointer!;
         });
 
         // Don't forget to deparent objects from the controllers or they will be destroyed!
         xrHelper.input.onControllerRemovedObservable.add((inputSource) => {
+            if(inputSource.uniqueId.endsWith("left")){
+                staticTextPlane.parent = null;
+            }
+        });
 
+        var guiManager = new GUI3DManager(this.scene);
+
+        var testButton = new Button3D("testButton");
+        guiManager.addControl(testButton);
+
+        testButton.position = new Vector3(0, 1.6, 3);
+        testButton.scaling.y = .5;
+
+        var testButtonTransform = new TransformNode("testButtonTransform", this.scene);
+        testButtonTransform.rotation.y = 90 * Math.PI / 180;
+        testButton.linkToTransformNode(testButtonTransform);
+
+        var testButtonText = new TextBlock();
+        testButtonText.text = "Hello World";
+        testButtonText.color = "white";
+        testButtonText.fontSize = 24;
+        testButton.content = testButtonText;
+
+        var testButtonMaterial = <StandardMaterial>testButton.mesh!.material;
+
+        var backgroundColor = new Color3(.284, .73, .831);
+        testButtonMaterial.diffuseColor = backgroundColor;
+        testButton.pointerOutAnimation = () => {
+            testButtonMaterial.diffuseColor = backgroundColor;
+        }
+
+        var hoverColor = new Color3(.752, .53, .735);
+        testButton.pointerEnterAnimation = () => {
+            testButtonMaterial.diffuseColor = hoverColor;
+        }
+
+        testButton.onPointerDownObservable.add(() => {
+            this.scene.beginAnimation(testSphere, 0, 75, false);
         });
 
 
-
         this.scene.debugLayer.show(); 
+
+        var panel = new ScatterPanel();
+        guiManager.addControl(panel);
+
+        panel.position = new Vector3(0, 1.6, 3); 
+        panel.margin = 0.25;
+        panel.blockLayout = true;
+        panel.rows = 4;
+
+        for(let i=0; i<20; i++){
+            let button = new HolographicButton("button");
+            panel.addControl(button);
+
+            var buttonText = new TextBlock();
+            buttonText.text = "" + (i + 1);
+            buttonText.color = "white";
+            buttonText.fontSize = 64;
+            button.content = buttonText;
+
+            button.onPointerDownObservable.add(() => {
+                testSphere.scaling.x = Math.random() + 0.5;
+                testSphere.scaling.y = Math.random() + 0.5;
+                testSphere.scaling.z = Math.random() + 0.5;
+                this.scene.beginAnimation(testSphere, 0, 75, false);
+            });
+
+
+        }
+    
     }
 
     // The main update loop will be executed once per frame before the scene is rendered
@@ -142,6 +239,8 @@ class Game
 
 }
 /******* End of the Game class ******/   
+
+
 
 // start the game
 var game = new Game();
